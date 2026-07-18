@@ -21,7 +21,12 @@ def send_email(book_title, listing):
     password = os.environ.get("EMAIL_APP_PASSWORD")
     if not sender or not password:
         raise RuntimeError("EMAIL_ADDRESS / EMAIL_APP_PASSWORD are not set.")
-    recipient = os.environ.get("EMAIL_TO") or sender
+
+    # EMAIL_TO may be a single address or a comma-separated list, e.g.
+    # "me@example.com, partner@example.com" -- a GitHub secret is just one
+    # string, so a comma-separated list is how multiple recipients fit in it.
+    raw_recipients = os.environ.get("EMAIL_TO") or sender
+    recipients = [addr.strip() for addr in raw_recipients.split(",") if addr.strip()]
 
     price = listing.get("price")
     currency = listing.get("currency", "")
@@ -30,7 +35,7 @@ def send_email(book_title, listing):
     msg = MIMEMultipart("related")
     msg["Subject"] = f"Match: {book_title} on {listing['source']} \u2014 {price_str}"
     msg["From"] = sender
-    msg["To"] = recipient
+    msg["To"] = ", ".join(recipients)
 
     image_tag = (
         '<img src="cid:listing_image" style="max-width:420px;border-radius:6px;" />'
@@ -67,4 +72,4 @@ def send_email(book_title, listing):
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
         server.login(sender, password)
-        server.sendmail(sender, [recipient], msg.as_string())
+        server.sendmail(sender, recipients, msg.as_string())
