@@ -1,0 +1,45 @@
+name: Rare Book Watchlist
+
+on:
+  schedule:
+    # Runs at 08:00 and 20:00 UTC every day (twice daily).
+    # GitHub Actions cron is always UTC -- convert to your local time.
+    - cron: '0 8,20 * * *'
+  workflow_dispatch: {}   # lets you trigger a run manually from the Actions tab
+
+permissions:
+  contents: write   # required so the workflow can commit data/ back to the repo
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run book search
+        env:
+          EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
+          EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          ETSY_API_KEY: ${{ secrets.ETSY_API_KEY }}
+          BIBLIO_API_KEY: ${{ secrets.BIBLIO_API_KEY }}
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python main.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "rare-book-watchlist-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Update watchlist state [skip ci]"
+          git push
