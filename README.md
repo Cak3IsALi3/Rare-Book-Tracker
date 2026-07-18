@@ -113,6 +113,18 @@ call — ask and this can be adapted to Cloud Functions + Scheduler.
 2. Go to **My Account → Application Keys**.
 3. Create a **Production** keyset (not Sandbox).
 4. Copy the **App ID (Client ID)** and **Cert ID (Client Secret)**.
+5. **Required before eBay will activate the keyset for API calls:** on the
+   keyset's **Notifications** page, eBay requires every developer to either
+   subscribe to or request exemption from "Marketplace Account Deletion"
+   notifications (GDPR-driven — it's how eBay tells third-party apps to
+   delete a user's data if that user deletes their eBay account). This
+   project only searches public listings via the client-credentials OAuth
+   flow and never touches any eBay member's personal/account data, so it
+   qualifies for the **exemption**: toggle "Exempted from Marketplace
+   Account Deletion," pick the reason closest to "doesn't access/store
+   eBay user data," and save. No code or endpoint needed. Skipping this
+   step entirely is what usually causes a brand-new production keyset to
+   silently fail every call.
 
 ### 2. Get an Etsy API key (free, ~5 minutes)
 
@@ -205,6 +217,7 @@ Each entry in `books.json` supports:
 | `year` | optional | Must appear in the listing text if set |
 | `edition_keywords` | optional | At least one must appear (e.g. `["first edition", "1st edition"]`) |
 | `exclude_keywords` | optional | Listing is rejected if *any* appear (e.g. `["book club", "reprint", "facsimile"]`) |
+| `min_price` | optional | Listing is rejected if priced *below* this — useful for genuinely rare books, where a suspiciously cheap "match" is usually a reprint, misidentified listing, or scam rather than a find |
 | `max_price` | optional | Listing is rejected if priced above this |
 
 Leave a field blank/empty and that check is simply skipped — an entry with

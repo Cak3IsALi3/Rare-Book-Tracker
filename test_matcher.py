@@ -11,6 +11,7 @@ book_hemingway = {
     "year": "1952",
     "edition_keywords": ["first edition", "1st edition"],
     "exclude_keywords": ["book club", "reprint", "facsimile", "paperback"],
+    "min_price": 300,
     "max_price": 8000,
 }
 
@@ -60,6 +61,13 @@ cases = [
         book_hemingway,
         {"title": "Hemingway THE OLD MAN AND THE SEA Scribner 1952 First Edition, signed, in slipcase",
          "description": "first edition first printing", "price": 25000},
+        False,
+    ),
+    (
+        "price suspiciously low for a real first -> reject",
+        book_hemingway,
+        {"title": "Hemingway THE OLD MAN AND THE SEA Scribner 1952 First Edition",
+         "description": "first edition first printing", "price": 12},
         False,
     ),
     (

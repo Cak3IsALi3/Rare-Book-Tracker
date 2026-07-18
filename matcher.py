@@ -119,8 +119,14 @@ def evaluate(book, listing, title_threshold=0.72):
     if hit:
         return False, [f"exclude_keyword '{hit}' found in listing"]
 
+    min_price = book.get("min_price")
     max_price = book.get("max_price")
     price = listing.get("price")
+    if min_price and price is not None and price < min_price:
+        # Useful for genuinely rare books: a copy priced far below what the
+        # real edition sells for is more often a reprint/misidentified
+        # listing (or a scam) than a steal.
+        return False, [f"price {price} below min_price {min_price}"]
     if max_price and price is not None and price > max_price:
         return False, [f"price {price} exceeds max_price {max_price}"]
 
