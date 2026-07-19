@@ -183,7 +183,7 @@ repository secret**. Add:
 | `BIBLIO_API_KEY` | from step 3 (optional — skip if not using Biblio) |
 | `EMAIL_ADDRESS` | the Gmail address sending alerts |
 | `EMAIL_APP_PASSWORD` | from step 4 |
-| `EMAIL_TO` | where alerts should be sent (optional — defaults to `EMAIL_ADDRESS`) |
+| `EMAIL_TO` | where alerts should be sent — one address, or several separated by commas (e.g. `me@example.com, partner@example.com`); optional, defaults to `EMAIL_ADDRESS` |
 
 ### 7. Allow the workflow to commit
 

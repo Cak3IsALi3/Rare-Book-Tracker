@@ -7,7 +7,8 @@
     "year": "1952",
     "edition_keywords": ["first edition", "1st edition"],
     "exclude_keywords": ["book club", "reprint", "facsimile", "paperback"],
-    "min_price": 800,
+    "min_price": 300,
+    "max_price": 8000,
     "notes": "No ISBN (too old to have one), so this matches on title+author+publisher+year+edition keywords instead. min_price filters out the occasional mislabeled reprint or scam listing priced way below what a real first actually sells for."
   },
   {
@@ -18,7 +19,7 @@
     "year": "",
     "edition_keywords": [],
     "exclude_keywords": ["book club"],
-    "min_price": 800,
+    "max_price": 500,
     "notes": "ISBN is set, so this matches on ISBN alone (strongest signal) and skips the other text checks."
   }
 ]
