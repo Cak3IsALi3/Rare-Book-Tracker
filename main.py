@@ -27,17 +27,10 @@ SOURCES = [search_ebay, search_etsy, search_biblio]
 
 
 def load_books():
-    # If BOOKS_JSON is set (as a GitHub secret), your real watchlist never
-    # has to be committed to the repo at all -- it's parsed directly from
-    # the environment variable. books.json on disk then stays purely as
-    # harmless example/template data, safe to have in git history even on
-    # a public repo. Falls back to the file if the secret isn't set, which
-    # is also what makes local testing easy without touching secrets.
     books_json_env = os.environ.get("BOOKS_JSON")
-    if books_json_env:
-        return json.loads(books_json_env)
-    with open("books.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+    if not books_json_env:
+        raise RuntimeError("BOOKS_JSON environment variable/secret is not set.")
+    return json.loads(books_json_env)
 
 
 def build_query(book):
