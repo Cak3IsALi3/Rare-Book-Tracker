@@ -34,6 +34,7 @@ jobs:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          BOOKS_JSON: ${{ secrets.BOOKS_JSON }}
         run: python main.py
 
       - name: Commit updated state
