@@ -204,6 +204,26 @@ From here it runs itself, twice a day, at 08:00 and 20:00 UTC (edit the
 `cron` line in `.github/workflows/check_books.yml` to change the times —
 [crontab.guru](https://crontab.guru) helps with the syntax).
 
+## Keeping your watchlist private
+
+By default `books.json` is a plain file in the repo — fine on a private
+repo, but visible to anyone if the repo is ever made public (e.g. for the
+free secret-scanning benefit mentioned above), and visible to any
+collaborator either way.
+
+To keep it out of git entirely: add a `BOOKS_JSON` secret (Settings ->
+Secrets and variables -> Actions) containing your real watchlist as JSON —
+paste the whole array in, same shape as `books.json`. `main.py` checks for
+that secret first and uses it if present; `books.json` on disk is then
+just harmless example data that's safe to leave committed.
+
+The tradeoff: editing a secret through GitHub's UI is clunkier than
+editing a tracked file — no `git diff`, no history, no easy review before
+a change goes live. A reasonable middle ground is to keep a real copy
+locally (in a file `.gitignore` already excludes if you name it e.g.
+`books.local.json`), edit that with your usual tools, and paste its
+contents into the `BOOKS_JSON` secret whenever you change something.
+
 ## Editing your watchlist
 
 Each entry in `books.json` supports:
