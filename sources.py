@@ -35,6 +35,7 @@ source for every book without special-casing anything.
 
 import base64
 import os
+import re
 import time
 from urllib.parse import quote
 from xml.etree import ElementTree
@@ -45,6 +46,22 @@ import requests
 def _text_query(book):
     """Shared helper for sources that only support keyword search."""
     return f"{book['title']} {book.get('author', '')}".strip()
+
+
+def _raise_with_body(resp):
+    """
+    requests' raise_for_status() only reports the HTTP status line (e.g.
+    "409 Client Error: Conflict for url: ..."), discarding the response
+    body -- which is exactly where eBay/Etsy/AbeBooks put the actually
+    useful diagnostic detail (a specific error code and message, not just
+    a bare status code). This re-raises with that body attached so a
+    workflow log shows what the API actually said instead of needing to
+    be reproduced locally to find out.
+    """
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise requests.HTTPError(f"{exc} | Response body: {resp.text[:1000]}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +99,7 @@ def _get_ebay_token():
         },
         timeout=30,
     )
-    resp.raise_for_status()
+    _raise_with_body(resp)
     payload = resp.json()
     _ebay_token_cache["token"] = payload["access_token"]
     _ebay_token_cache["expires_at"] = now + int(payload.get("expires_in", 7200))
@@ -96,37 +113,64 @@ def search_ebay(book, limit=25):
     The Browse API scopes every call to exactly one eBay site via the
     X-EBAY-C-MARKETPLACE-ID header -- it does not search across sites, so
     a book listed only on eBay.co.uk is invisible to a search scoped to
-    EBAY_US, and vice versa. This loops over EBAY_MARKETPLACES (a
-    comma-separated list of MarketplaceIdEnum values, e.g.
-    "EBAY_US,EBAY_GB,EBAY_DE" -- see
+    EBAY_US, and vice versa. This loops over EBAY_MARKETPLACES -- a
+    comma-separated list of MarketplaceIdEnum values ONLY, e.g.
+    "EBAY_US,EBAY_GB,EBAY_DE" -- with nothing else in the string (no
+    trailing notes, no spaces around commas mattering, but no free text
+    either). See
     https://developer.ebay.com/api-docs/buy/browse/types/gct:MarketplaceIdEnum
-    for the full list), defaulting to US + UK since rare/antiquarian book
+    for the full list. Defaults to US + UK since rare/antiquarian book
     dealers are heavily concentrated in both. Results are deduped by
     itemId in case the same listing surfaces under more than one
     marketplace query.
     """
-    marketplaces = [
+    raw_marketplaces = [
         m.strip() for m in os.environ.get("EBAY_MARKETPLACES", "EBAY_US,EBAY_GB").split(",")
         if m.strip()
     ]
+    # A real MarketplaceIdEnum value is uppercase letters/underscores only
+    # (EBAY_US, EBAY_GB, EBAY_DE, ...) -- anything else (extra words,
+    # lowercase, spaces) is almost certainly a malformed EBAY_MARKETPLACES
+    # secret, e.g. "EBAY_DE and some other countries" instead of just
+    # "EBAY_DE". Skip and warn instead of sending it to eBay and getting
+    # back an opaque error.
+    marketplaces = []
+    for m in raw_marketplaces:
+        if re.fullmatch(r"[A-Z_]+", m):
+            marketplaces.append(m)
+        else:
+            print(f"    eBay: skipping invalid EBAY_MARKETPLACES entry {m!r} "
+                  f"(expected a plain value like EBAY_US, EBAY_GB, EBAY_DE)")
+    if not marketplaces:
+        raise RuntimeError(
+            f"No valid entries in EBAY_MARKETPLACES ({raw_marketplaces!r}). "
+            f"Expected a comma-separated list like 'EBAY_US,EBAY_GB'."
+        )
     token = _get_ebay_token()
     query = _text_query(book)
 
     results = []
     seen_item_ids = set()
     for marketplace in marketplaces:
-        resp = requests.get(
-            "https://api.ebay.com/buy/browse/v1/item_summary/search",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "X-EBAY-C-MARKETPLACE-ID": marketplace,
-            },
-            params={"q": query, "limit": limit},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        items = resp.json().get("itemSummaries", [])
-        print(f"    eBay [{marketplace}]: {len(items)} raw result(s)")
+        try:
+            resp = requests.get(
+                "https://api.ebay.com/buy/browse/v1/item_summary/search",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "X-EBAY-C-MARKETPLACE-ID": marketplace,
+                },
+                params={"q": query, "limit": limit},
+                timeout=30,
+            )
+            _raise_with_body(resp)
+            items = resp.json().get("itemSummaries", [])
+            print(f"    eBay [{marketplace}]: {len(items)} raw result(s)")
+        except requests.RequestException as exc:
+            # One marketplace failing (rate limit, transient error, bad
+            # config) shouldn't discard results already fetched from the
+            # others -- log it and move on to the next marketplace.
+            print(f"    eBay [{marketplace}]: FAILED -- {exc}")
+            continue
 
         for item in items:
             item_id = item.get("itemId", "")
@@ -174,7 +218,7 @@ def search_etsy(book, limit=25):
         params={"keywords": _text_query(book), "limit": min(limit, 100)},
         timeout=30,
     )
-    resp.raise_for_status()
+    _raise_with_body(resp)
     items = resp.json().get("results", [])
 
     results = []
@@ -230,7 +274,7 @@ def search_biblio(book, limit=25):
         params={"q": _text_query(book), "limit": limit},
         timeout=30,
     )
-    resp.raise_for_status()
+    _raise_with_body(resp)
     items = resp.json().get("results", [])  # TODO: confirm response shape
 
     results = []
@@ -317,7 +361,7 @@ def search_abebooks(book, limit=25):
 
     query_string = "&".join(f"{k}={_encode_latin1(v)}" for k, v in params.items())
     resp = requests.get(f"https://search2.abebooks.com/search?{query_string}", timeout=30)
-    resp.raise_for_status()
+    _raise_with_body(resp)
 
     root = ElementTree.fromstring(resp.content)
     results = []
