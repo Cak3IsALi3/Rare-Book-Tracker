@@ -15,24 +15,36 @@ site a result came from:
         "isbn": "",              # filled in only if the API exposes it
     }
 
-Every function here talks to an official, sanctioned API -- eBay's Browse
-API and Etsy's Open API v3 are both free to sign up for and are meant for
-exactly this kind of programmatic search. That's a deliberate choice: it's
-also the *only* approach that doesn't eventually get an app blocked, since
-you're using the door the site built for this rather than picking the lock
-on the front door. See README.md for why AbeBooks isn't included here, and
-for how to add another site of your own later.
+Every function takes (book, limit) -- the full watchlist entry from
+books.json, not just a query string -- so a source that supports precise
+server-side filters (AbeBooks does: publisher, exact publication year,
+first-edition tagging, price range) can use them directly instead of
+relying only on a keyword search plus matcher.py's post-hoc filtering.
+Sources that only support keyword search (eBay, Etsy) just pull
+title/author out of the book dict to build one.
 
-All functions take (query, limit) and return a list -- an empty list on
-"source not configured", never an exception for that case, so main.py can
-call every source for every book without special-casing anything.
+All of these talk to an official, sanctioned API. That's a deliberate
+choice: it's also the *only* approach that doesn't eventually get an app
+blocked, since you're using the door the site built for this rather than
+picking the lock on the front door.
+
+Every function returns a list -- an empty list on "source not
+configured", never an exception for that case, so main.py can call every
+source for every book without special-casing anything.
 """
 
 import base64
 import os
 import time
+from urllib.parse import quote
+from xml.etree import ElementTree
 
 import requests
+
+
+def _text_query(book):
+    """Shared helper for sources that only support keyword search."""
+    return f"{book['title']} {book.get('author', '')}".strip()
 
 
 # ---------------------------------------------------------------------------
@@ -77,41 +89,68 @@ def _get_ebay_token():
     return _ebay_token_cache["token"]
 
 
-def search_ebay(query, limit=25):
-    """Searches active eBay listings by keyword via the Browse API."""
+def search_ebay(book, limit=25):
+    """
+    Searches active eBay listings by keyword via the Browse API.
+
+    The Browse API scopes every call to exactly one eBay site via the
+    X-EBAY-C-MARKETPLACE-ID header -- it does not search across sites, so
+    a book listed only on eBay.co.uk is invisible to a search scoped to
+    EBAY_US, and vice versa. This loops over EBAY_MARKETPLACES (a
+    comma-separated list of MarketplaceIdEnum values, e.g.
+    "EBAY_US,EBAY_GB,EBAY_DE" -- see
+    https://developer.ebay.com/api-docs/buy/browse/types/gct:MarketplaceIdEnum
+    for the full list), defaulting to US + UK since rare/antiquarian book
+    dealers are heavily concentrated in both. Results are deduped by
+    itemId in case the same listing surfaces under more than one
+    marketplace query.
+    """
+    marketplaces = [
+        m.strip() for m in os.environ.get("EBAY_MARKETPLACES", "EBAY_US,EBAY_GB").split(",")
+        if m.strip()
+    ]
     token = _get_ebay_token()
-    resp = requests.get(
-        "https://api.ebay.com/buy/browse/v1/item_summary/search",
-        headers={
-            "Authorization": f"Bearer {token}",
-            "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-        },
-        params={"q": query, "limit": limit},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    items = resp.json().get("itemSummaries", [])
+    query = _text_query(book)
 
     results = []
-    for item in items:
-        price = item.get("price") or {}
-        image = item.get("image") or {}
-        results.append({
-            "source": "eBay",
-            "item_id": item.get("itemId", ""),
-            "title": item.get("title", ""),
-            # The summary search doesn't return a full description; the
-            # subtitle plus title is usually enough to match against since
-            # sellers pack edition/publisher info into both. Fetching the
-            # full description would mean one extra getItem() call per
-            # candidate -- easy to add later if you need it.
-            "description": item.get("subtitle", ""),
-            "url": item.get("itemWebUrl", ""),
-            "image": image.get("imageUrl", ""),
-            "price": float(price["value"]) if price.get("value") else None,
-            "currency": price.get("currency", ""),
-            "isbn": "",
-        })
+    seen_item_ids = set()
+    for marketplace in marketplaces:
+        resp = requests.get(
+            "https://api.ebay.com/buy/browse/v1/item_summary/search",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-EBAY-C-MARKETPLACE-ID": marketplace,
+            },
+            params={"q": query, "limit": limit},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        items = resp.json().get("itemSummaries", [])
+
+        for item in items:
+            item_id = item.get("itemId", "")
+            if item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(item_id)
+
+            price = item.get("price") or {}
+            image = item.get("image") or {}
+            results.append({
+                "source": "eBay",
+                "item_id": item_id,
+                "title": item.get("title", ""),
+                # The summary search doesn't return a full description; the
+                # subtitle plus title is usually enough to match against since
+                # sellers pack edition/publisher info into both. Fetching the
+                # full description would mean one extra getItem() call per
+                # candidate -- easy to add later if you need it.
+                "description": item.get("subtitle", ""),
+                "url": item.get("itemWebUrl", ""),
+                "image": image.get("imageUrl", ""),
+                "price": float(price["value"]) if price.get("value") else None,
+                "currency": price.get("currency", ""),
+                "isbn": "",
+            })
     return results
 
 
@@ -122,7 +161,7 @@ def search_ebay(query, limit=25):
 # just a static API key (no OAuth/user login required).
 # ---------------------------------------------------------------------------
 
-def search_etsy(query, limit=25):
+def search_etsy(book, limit=25):
     """Searches active Etsy listings by keyword via the Open API v3."""
     api_key = os.environ.get("ETSY_API_KEY")
     if not api_key:
@@ -131,7 +170,7 @@ def search_etsy(query, limit=25):
     resp = requests.get(
         "https://api.etsy.com/v3/application/listings/active",
         headers={"x-api-key": api_key},
-        params={"keywords": query, "limit": min(limit, 100)},
+        params={"keywords": _text_query(book), "limit": min(limit, 100)},
         timeout=30,
     )
     resp.raise_for_status()
@@ -179,7 +218,7 @@ def search_etsy(query, limit=25):
 # Until BIBLIO_API_KEY is set, this source is skipped automatically.
 # ---------------------------------------------------------------------------
 
-def search_biblio(query, limit=25):
+def search_biblio(book, limit=25):
     api_key = os.environ.get("BIBLIO_API_KEY")
     if not api_key:
         return []
@@ -187,7 +226,7 @@ def search_biblio(query, limit=25):
     resp = requests.get(
         "https://api.biblio.com/v1/search",  # TODO: confirm against Biblio's docs
         headers={"Authorization": f"Bearer {api_key}"},
-        params={"q": query, "limit": limit},
+        params={"q": _text_query(book), "limit": limit},
         timeout=30,
     )
     resp.raise_for_status()
@@ -205,5 +244,101 @@ def search_biblio(query, limit=25):
             "price": item.get("price"),
             "currency": item.get("currency", "USD"),
             "isbn": item.get("isbn", ""),
+        })
+    return results
+
+
+# ---------------------------------------------------------------------------
+# AbeBooks -- Search Web Services (SWS)
+#
+# Requires joining AbeBooks' Affiliate Program and requesting a Client Key
+# by emailing affiliate@abebooks.com (see README.md for the application
+# email). Unlike the sources above, this one is built from AbeBooks' own
+# March 2025 "Search Web Services End User Guide" rather than general
+# knowledge, so field names and behavior are as documented there -- the
+# one thing that guide doesn't fully specify is the exact XML wrapper
+# element around multiple <Book> records, which is why the parsing below
+# searches for <Book> anywhere in the tree instead of assuming a specific
+# root tag.
+#
+# SWS supports real server-side filters that map directly onto books.json
+# fields -- publisher name, exact publication year, first-edition tagging,
+# and a price range -- so this function leans on those instead of relying
+# only on matcher.py's post-hoc text matching the way eBay/Etsy do.
+# ---------------------------------------------------------------------------
+
+def _encode_latin1(value):
+    """
+    SWS requires ISO-8859-1 URL encoding, not the UTF-8 `requests` uses by
+    default -- matters for accented author/title names (e.g. "Hoelderlin"
+    with an umlaut). Falls back to UTF-8 for the rare character that can't
+    be represented in Latin-1 at all.
+    """
+    try:
+        return quote(str(value).encode("iso-8859-1"))
+    except UnicodeEncodeError:
+        return quote(str(value).encode("utf-8"))
+
+
+def search_abebooks(book, limit=25):
+    api_key = os.environ.get("ABEBOOKS_CLIENT_KEY")
+    if not api_key:
+        return []
+
+    params = {
+        "clientkey": api_key,
+        "outputsize": "long",
+        "maxresults": min(limit, 200),
+        "currency": "USD",  # normalizes listingPrice to USD regardless of seller's currency
+    }
+
+    # Primary search parameter -- ISBN is the most precise when we have one.
+    if book.get("isbn"):
+        params["isbn"] = book["isbn"]
+    else:
+        params["title"] = book["title"]
+        if book.get("author"):
+            params["author"] = book["author"]
+
+    # Secondary parameters -- real server-side filtering, not just text
+    # matching after the fact.
+    if book.get("publisher"):
+        params["pubname"] = book["publisher"]
+    if book.get("year"):
+        params["minpubyear"] = book["year"]
+        params["maxpubyear"] = book["year"]
+    if book.get("min_price"):
+        params["minprice"] = int(book["min_price"])
+    if book.get("max_price"):
+        params["maxprice"] = int(book["max_price"])
+    if any("first ed" in kw.lower() or "1st ed" in kw.lower() for kw in book.get("edition_keywords") or []):
+        params["firstedition"] = "yes"
+
+    query_string = "&".join(f"{k}={_encode_latin1(v)}" for k, v in params.items())
+    resp = requests.get(f"https://search2.abebooks.com/search?{query_string}", timeout=30)
+    resp.raise_for_status()
+
+    root = ElementTree.fromstring(resp.content)
+    results = []
+    for book_el in root.findall(".//Book"):
+        def field(tag, default=""):
+            el = book_el.find(tag)
+            return el.text if el is not None and el.text else default
+
+        listing_url = field("listingUrl")
+        if listing_url and not listing_url.startswith("http"):
+            listing_url = f"https://www.{listing_url}"
+
+        price_text = field("listingPrice")
+        results.append({
+            "source": "AbeBooks",
+            "item_id": field("bookId"),
+            "title": field("title"),
+            "description": " ".join(filter(None, [field("vendorDescription"), field("keywords")])),
+            "url": listing_url,
+            "image": field("catalogImage") or field("vendorImage"),
+            "price": float(price_text) if price_text else None,
+            "currency": "USD",
+            "isbn": field("isbn13") or field("isbn10"),
         })
     return results

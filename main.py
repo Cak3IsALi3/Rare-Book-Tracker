@@ -13,7 +13,7 @@ import os
 import sys
 import time
 
-from sources import search_ebay, search_etsy, search_biblio
+from sources import search_ebay, search_etsy, search_biblio, search_abebooks
 from matcher import evaluate
 from emailer import send_email
 from storage import load_seen, save_seen, write_status
@@ -21,20 +21,23 @@ from storage import load_seen, save_seen, write_status
 DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
 
 # Add more sources here as you wire them up -- every function in this list
-# just needs to accept (query, limit) and return the normalized list shape
+# just needs to accept (book, limit) and return the normalized list shape
 # documented at the top of sources.py.
-SOURCES = [search_ebay, search_etsy, search_biblio]
+SOURCES = [search_ebay, search_etsy, search_biblio, search_abebooks]
 
 
 def load_books():
+    # If BOOKS_JSON is set (as a GitHub secret), your real watchlist never
+    # has to be committed to the repo at all -- it's parsed directly from
+    # the environment variable. books.json on disk then stays purely as
+    # harmless example/template data, safe to have in git history even on
+    # a public repo. Falls back to the file if the secret isn't set, which
+    # is also what makes local testing easy without touching secrets.
     books_json_env = os.environ.get("BOOKS_JSON")
-    if not books_json_env:
-        raise RuntimeError("BOOKS_JSON environment variable/secret is not set.")
-    return json.loads(books_json_env)
-
-
-def build_query(book):
-    return f"{book['title']} {book.get('author', '')}".strip()
+    if books_json_env:
+        return json.loads(books_json_env)
+    with open("books.json", "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def main():
@@ -44,13 +47,12 @@ def main():
     errors = []
 
     for book in books:
-        query = build_query(book)
         print(f"\n=== Searching: {book['title']} ===")
 
         listings = []
         for search_fn in SOURCES:
             try:
-                found = search_fn(query)
+                found = search_fn(book)
                 listings.extend(found)
                 if found or DEBUG:
                     print(f"  {search_fn.__name__}: {len(found)} listing(s)")
