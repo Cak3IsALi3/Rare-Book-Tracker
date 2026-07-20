@@ -59,40 +59,6 @@ instant to rotate — none of this data is worth protecting with anything
 more elaborate than "don't hardcode it, and regenerate it if you're ever
 unsure."
 
-## Why GitHub Actions, and not Google Cloud Shell
-
-Cloud Shell is a browser-based terminal for interactive admin/dev work —
-Google's own documentation is explicit that it's ["intended for
-interactive use only": non-interactive sessions are killed after 40
-minutes, and every session is hard-capped at 12 hours regardless of
-activity](https://docs.cloud.google.com/shell/docs/quotas-limits), with no
-built-in scheduler at all. A `cron` job started inside it doesn't survive
-you closing the tab. It's built for a different job than this one — it
-would need to be re-opened and babysat, which is the exact opposite of
-"runs by itself twice a day."
-
-GitHub Actions, by contrast, is a real (if narrowly-scoped) cloud compute
-product: `schedule:`/`cron` triggers spin up a fresh disposable Linux VM
-("runner") on GitHub's infrastructure, run the job, and tear it down —
-GitHub-the-repo-host and GitHub Actions-the-CI/CD-platform are two
-products under one roof, not the same thing. That's a genuine, common
-point of confusion, not a naive question.
-
-For completeness, the closer GCP equivalent isn't Cloud Shell, it's
-**Cloud Scheduler + Cloud Functions** (Scheduler triggers a Function on a
-cron schedule; secrets live in Secret Manager or as encrypted
-environment variables). It's a legitimate design and has one real
-advantage — Cloud Scheduler fires much closer to the exact second than
-GitHub's cron, which is best-effort and can drift under load. It has two
-real disadvantages for this project: it requires a Google Cloud **billing
-account with a credit card on file** even to use the always-free tier, and
-meaningfully more setup (GCP project, enabling APIs, deploying a function,
-wiring Secret Manager) than "add secrets in a settings page." For a
-personal watchlist checked twice a day, a few minutes of schedule drift
-doesn't matter, and zero-friction/no-card wins. If you'd rather run this
-on GCP anyway (e.g. you already have infra there), that's a reasonable
-call — ask and this can be adapted to Cloud Functions + Scheduler.
-
 ## What you get
 
 - `books.json` — your watchlist. Add/remove/edit books freely; the search
