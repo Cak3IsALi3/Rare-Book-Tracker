@@ -122,20 +122,6 @@ Using a different provider (Outlook, a transactional service, etc.)? Just
 change the `smtplib.SMTP_SSL(...)` line in `emailer.py` — the rest of the
 project doesn't care how the email gets sent.
 
-### 5. Push this project to a new GitHub repo
-
-```bash
-cd rare-book-tracker
-git init
-git add .
-git commit -m "Initial commit"
-gh repo create rare-book-watchlist --private --source=. --push
-# no gh CLI? create an empty repo on github.com, then:
-#   git remote add origin <your-repo-url>
-#   git branch -M main
-#   git push -u origin main
-```
-
 ### 6. Add your secrets
 
 In the repo on GitHub: **Settings → Secrets and variables → Actions → New
