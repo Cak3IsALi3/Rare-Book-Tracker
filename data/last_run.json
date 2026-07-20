@@ -1,6 +1,24 @@
 {
-  "last_run_utc": "2026-07-20T10:43:18+00:00",
+  "last_run_utc": "2026-07-20T20:44:48+00:00",
   "books_checked": 17,
   "new_matches": 0,
-  "errors": []
+  "errors": [
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Emma': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Emma+Jane+Austen&limit=25",
+    "search_etsy failed for 'Emma': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Emma+Jane+Austen&limit=25",
+    "search_etsy failed for 'Persuasion': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Persuasion+Jane+Austen&limit=25",
+    "search_etsy failed for 'Persuasion': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Persuasion+Jane+Austen&limit=25",
+    "search_etsy failed for 'Persuasion': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Persuasion+Jane+Austen&limit=25",
+    "search_etsy failed for 'Mansfield Park': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Mansfield+Park+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Pride and Prejudice': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Pride+and+Prejudice+Jane+Austen&limit=25",
+    "search_etsy failed for 'Sense and Sensibility': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Sense+and+Sensibility+Jane+Austen&limit=25",
+    "search_etsy failed for 'Sense and Sensibility': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Sense+and+Sensibility+Jane+Austen&limit=25",
+    "search_etsy failed for 'Sense and Sensibility': 403 Client Error: Forbidden for url: https://api.etsy.com/v3/application/listings/active?keywords=Sense+and+Sensibility+Jane+Austen&limit=25"
+  ]
 }
