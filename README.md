@@ -59,6 +59,40 @@ instant to rotate — none of this data is worth protecting with anything
 more elaborate than "don't hardcode it, and regenerate it if you're ever
 unsure."
 
+## Why GitHub Actions, and not Google Cloud Shell
+
+Cloud Shell is a browser-based terminal for interactive admin/dev work —
+Google's own documentation is explicit that it's ["intended for
+interactive use only": non-interactive sessions are killed after 40
+minutes, and every session is hard-capped at 12 hours regardless of
+activity](https://docs.cloud.google.com/shell/docs/quotas-limits), with no
+built-in scheduler at all. A `cron` job started inside it doesn't survive
+you closing the tab. It's built for a different job than this one — it
+would need to be re-opened and babysat, which is the exact opposite of
+"runs by itself twice a day."
+
+GitHub Actions, by contrast, is a real (if narrowly-scoped) cloud compute
+product: `schedule:`/`cron` triggers spin up a fresh disposable Linux VM
+("runner") on GitHub's infrastructure, run the job, and tear it down —
+GitHub-the-repo-host and GitHub Actions-the-CI/CD-platform are two
+products under one roof, not the same thing. That's a genuine, common
+point of confusion, not a naive question.
+
+For completeness, the closer GCP equivalent isn't Cloud Shell, it's
+**Cloud Scheduler + Cloud Functions** (Scheduler triggers a Function on a
+cron schedule; secrets live in Secret Manager or as encrypted
+environment variables). It's a legitimate design and has one real
+advantage — Cloud Scheduler fires much closer to the exact second than
+GitHub's cron, which is best-effort and can drift under load. It has two
+real disadvantages for this project: it requires a Google Cloud **billing
+account with a credit card on file** even to use the always-free tier, and
+meaningfully more setup (GCP project, enabling APIs, deploying a function,
+wiring Secret Manager) than "add secrets in a settings page." For a
+personal watchlist checked twice a day, a few minutes of schedule drift
+doesn't matter, and zero-friction/no-card wins. If you'd rather run this
+on GCP anyway (e.g. you already have infra there), that's a reasonable
+call — ask and this can be adapted to Cloud Functions + Scheduler.
+
 ## What you get
 
 - `books.json` — your watchlist. Add/remove/edit books freely; the search
@@ -79,7 +113,15 @@ unsure."
 2. Go to **My Account → Application Keys**.
 3. Create a **Production** keyset (not Sandbox).
 4. Copy the **App ID (Client ID)** and **Cert ID (Client Secret)**.
-5. **Required before eBay will activate the keyset for API calls:** on the
+5. eBay's Browse API scopes every search to one site at a time — the
+   project searches `EBAY_US` and `EBAY_GB` by default (a book listed only
+   on eBay.co.uk won't show up in a US-only search, and vice versa). To
+   change this, add an `EBAY_MARKETPLACES` secret with a comma-separated
+   list, e.g. `EBAY_US,EBAY_GB,EBAY_DE` — see eBay's
+   [MarketplaceIdEnum](https://developer.ebay.com/api-docs/buy/browse/types/gct:MarketplaceIdEnum)
+   for the full list of sites. This isn't sensitive data, so a plain value
+   is fine; it just lives in Secrets for convenience alongside everything else.
+6. **Required before eBay will activate the keyset for API calls:** on the
    keyset's **Notifications** page, eBay requires every developer to either
    subscribe to or request exemption from "Marketplace Account Deletion"
    notifications (GDPR-driven — it's how eBay tells third-party apps to
@@ -99,7 +141,62 @@ unsure."
    for this use case since we only call public read-only endpoints).
 3. Copy the **Keystring** — that's your `ETSY_API_KEY`.
 
-### 3. (Optional) Biblio
+### 3. Get an AbeBooks Client Key (free, but requires manual approval)
+
+Unlike eBay/Etsy, this isn't self-serve — AbeBooks gates their Search Web
+Services (SWS) behind their Affiliate Program:
+
+1. Join the [Affiliate Program](https://www.abebooks.com/books/AffiliateProgram/) (free).
+2. Email `affiliate@abebooks.com` requesting a Client Key. They ask for:
+   the IP address you'll make requests from, your URL, your email address,
+   a technical contact name, and your Affiliate ID. A draft:
+
+   > Subject: Search Web Services Client Key Request
+   >
+   > Hello,
+   >
+   > I'd like to request a Client Key for AbeBooks Search Web Services.
+   >
+   > 1. IP address: my application runs on GitHub Actions' hosted runners,
+   > which use dynamic IPs from GitHub's published Actions ranges
+   > (https://api.github.com/meta) rather than one fixed address — could
+   > you confirm whether Client Key authorization is enforced by a
+   > specific allow-listed IP, or based on the Client Key alone? If a
+   > fixed IP is required, I'd appreciate guidance for a CI-based
+   > environment like this.
+   > 2. URL: [your GitHub repo or personal site]
+   > 3. Email address: [your email]
+   > 4. Technical contact name: [your name]
+   > 5. Affiliate ID: [from step 1]
+   >
+   > This is a personal-use tool that searches for specific rare/collectible
+   > books I'm trying to buy and emails me when a match appears — low
+   > volume, well under your documented rate limit, running on a schedule
+   > roughly twice a day.
+   >
+   > Thank you,
+   > [Name]
+
+3. **The IP question above genuinely matters and isn't yet resolved** —
+   AbeBooks' form asks for a specific IP, and GitHub Actions runners don't
+   have one; their reply determines whether this works as-is. If Client
+   Key auth turns out to be IP-locked with no support for a dynamic CI
+   environment, AbeBooks would need to run from somewhere with a fixed IP
+   instead of GitHub Actions — worth asking directly before assuming
+   either way.
+4. Once you have a key, set it as `ABEBOOKS_CLIENT_KEY`.
+
+`search_abebooks()` in `sources.py` is a full implementation, not a
+scaffold — built directly from AbeBooks' own March 2025 SWS documentation
+and tested against their real sample XML. It's also the most precise of
+the four sources: unlike eBay/Etsy, AbeBooks' API supports true
+server-side filtering on publisher, exact publication year, first-edition
+tagging, and price range, so it applies most of a book's watchlist
+criteria *before* a listing is even returned, rather than relying only on
+matcher.py's post-hoc text matching. Leave `ABEBOOKS_CLIENT_KEY` unset and
+this source is skipped automatically, same as Etsy/Biblio.
+
+### 4. (Optional) Biblio
 
 Biblio's API isn't public. Join their free [affiliate
 program](https://www.biblio.com/affiliate_program/), then email their
@@ -110,7 +207,7 @@ fill in the real endpoint/field names in `search_biblio()` in
 the current function is a scaffold rather than a tested integration).
 Leave `BIBLIO_API_KEY` unset and this source is skipped automatically.
 
-### 4. Create a Gmail App Password
+### 5. Create a Gmail App Password
 
 Regular Gmail passwords don't work for SMTP anymore.
 
@@ -122,7 +219,21 @@ Using a different provider (Outlook, a transactional service, etc.)? Just
 change the `smtplib.SMTP_SSL(...)` line in `emailer.py` — the rest of the
 project doesn't care how the email gets sent.
 
-### 6. Add your secrets
+### 6. Push this project to a new GitHub repo
+
+```bash
+cd rare-book-tracker
+git init
+git add .
+git commit -m "Initial commit"
+gh repo create rare-book-watchlist --private --source=. --push
+# no gh CLI? create an empty repo on github.com, then:
+#   git remote add origin <your-repo-url>
+#   git branch -M main
+#   git push -u origin main
+```
+
+### 7. Add your secrets
 
 In the repo on GitHub: **Settings → Secrets and variables → Actions → New
 repository secret**. Add:
@@ -131,26 +242,28 @@ repository secret**. Add:
 |---|---|
 | `EBAY_CLIENT_ID` | from step 1 |
 | `EBAY_CLIENT_SECRET` | from step 1 |
+| `EBAY_MARKETPLACES` | optional — comma-separated eBay sites to search, defaults to `EBAY_US,EBAY_GB` |
 | `ETSY_API_KEY` | from step 2 |
-| `BIBLIO_API_KEY` | from step 3 (optional — skip if not using Biblio) |
+| `ABEBOOKS_CLIENT_KEY` | from step 3 (optional — skip if not using AbeBooks yet) |
+| `BIBLIO_API_KEY` | from step 4 (optional — skip if not using Biblio) |
 | `EMAIL_ADDRESS` | the Gmail address sending alerts |
-| `EMAIL_APP_PASSWORD` | from step 4 |
+| `EMAIL_APP_PASSWORD` | from step 5 |
 | `EMAIL_TO` | where alerts should be sent — one address, or several separated by commas (e.g. `me@example.com, partner@example.com`); optional, defaults to `EMAIL_ADDRESS` |
 
-### 7. Allow the workflow to commit
+### 8. Allow the workflow to commit
 
 **Settings → Actions → General → Workflow permissions** → select **"Read
 and write permissions"** → Save. (This lets the workflow save its
 "already emailed you about this" state back to the repo — see
 "How duplicate alerts are avoided" below.)
 
-### 8. Test it
+### 9. Test it
 
 **Actions tab → Rare Book Watchlist → Run workflow.** Check the run's log
-to confirm each source found listings; if `books.json` still has the
-sample entries, you should see real eBay/Etsy results in the log (an
-actual match/email depends on whether a matching copy happens to be
-listed right now).
+to confirm each configured source found listings; if `books.json` still
+has the sample entries, you should see real results in the log for
+whichever sources have keys set (an actual match/email depends on whether
+a matching copy happens to be listed right now).
 
 From here it runs itself, twice a day, at 08:00 and 20:00 UTC (edit the
 `cron` line in `.github/workflows/check_books.yml` to change the times —

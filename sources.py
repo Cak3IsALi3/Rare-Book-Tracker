@@ -126,6 +126,7 @@ def search_ebay(book, limit=25):
         )
         resp.raise_for_status()
         items = resp.json().get("itemSummaries", [])
+        print(f"    eBay [{marketplace}]: {len(items)} raw result(s)")
 
         for item in items:
             item_id = item.get("itemId", "")
