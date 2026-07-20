@@ -29,8 +29,10 @@ jobs:
         env:
           EBAY_CLIENT_ID: ${{ secrets.EBAY_CLIENT_ID }}
           EBAY_CLIENT_SECRET: ${{ secrets.EBAY_CLIENT_SECRET }}
+          EBAY_MARKETPLACES: ${{ secrets.EBAY_MARKETPLACES }}
           ETSY_API_KEY: ${{ secrets.ETSY_API_KEY }}
           BIBLIO_API_KEY: ${{ secrets.BIBLIO_API_KEY }}
+          ABEBOOKS_CLIENT_KEY: ${{ secrets.ABEBOOKS_CLIENT_KEY }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
